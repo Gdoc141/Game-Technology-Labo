@@ -102,9 +102,8 @@ int main(void)
   /* Initialize RC5 encoder */
   RC5_Encode_Init();
   
-  /* Send a test RC5 frame: Address=0, Command=1, Toggle bit=0 */
-  HAL_Delay(1000);  /* Wait 1 second before sending */
-  RC5_Encode_SendFrame(0, 1, RC5_CTRL_RESET);
+  /* Wait a moment before starting */
+  HAL_Delay(500);
 
   /* USER CODE END 2 */
 
@@ -116,13 +115,14 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     
-    /* Send RC5 command every 2 seconds */
-    HAL_Delay(2000);
+    /* Send RC5 command every 1 second (simulating button press) */
+    HAL_Delay(1000);
     
     /* Toggle LED */
     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
     
     /* Send RC5 frame: Address=0 (TV), Command=12 (Volume Up) */
+    /* This will show the envelope (PA2) and carrier (PA6) on the scope */
     RC5_Encode_SendFrame(0, 12, RC5_CTRL_RESET);
   }
   /* USER CODE END 3 */

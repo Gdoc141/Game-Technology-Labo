@@ -31,9 +31,15 @@ static uint16_t RC5_BinFrameGeneration(uint8_t RC5_Address, uint8_t RC5_Instruct
 static uint32_t RC5_ManchesterConvert(uint16_t RC5_BinaryFrameFormat);
 static void RC5_Encode_DeInit(void);
 
+/* External Variables ---------------------------------------------------------*/
+extern TIM_HandleTypeDef htim15;  /* Low Frequency Timer for RC5 bit timing */
+extern TIM_HandleTypeDef htim16;  /* High Frequency Timer for 38kHz carrier */
+
+/* Private macros for easier access */
+#define TimHandleLF htim15
+#define TimHandleHF htim16
+
 /* Private_Variables ---------------------------------------------------------*/
-TIM_HandleTypeDef TimHandleLF;  /* Low Frequency Timer for RC5 bit timing */
-TIM_HandleTypeDef TimHandleHF;  /* High Frequency Timer for 38kHz carrier */
 uint8_t RC5RealFrameLength = 14;
 uint8_t RC5GlobalFrameLength = 64;
 uint16_t RC5BinaryFrameFormat = 0;
@@ -87,17 +93,17 @@ void RC5_Encode_Init(void)
   TIM_OC_InitTypeDef ch_config;
   GPIO_InitTypeDef gpio_init_struct;
 
-  /* TIM15 clock enable - Low Frequency timer for RC5 bit timing */
-  IR_TIM_LF_CLK();
-
-  /* TIM16 clock enable - High Frequency timer for 38kHz carrier */
-  IR_TIM_HF_CLK();
-
-  TimHandleLF.Instance = IR_TIM_LF;
-  TimHandleHF.Instance = IR_TIM_HF;
-
-  /* Configure GPIO pin for IR output (PA6 - TIM16_CH1) */
-  IR_GPIO_PORT_CLK();
+  /* GPIO clocks already enabled in main.c MX_GPIO_Init() */
+  
+  /* Configure PA2 (TIM15_CH1 - Envelope) */
+  gpio_init_struct.Pin = IR_GPIO_PIN_LF;
+  gpio_init_struct.Mode = GPIO_MODE_AF_PP;
+  gpio_init_struct.Pull = GPIO_NOPULL;
+  gpio_init_struct.Speed = GPIO_SPEED_FREQ_HIGH;
+  gpio_init_struct.Alternate = IR_GPIO_AF_LF;
+  HAL_GPIO_Init(IR_GPIO_PORT_LF, &gpio_init_struct);
+  
+  /* Configure PA6 (TIM16_CH1 - Carrier) */
   gpio_init_struct.Pin = IR_GPIO_PIN_HF;
   gpio_init_struct.Mode = GPIO_MODE_AF_PP;
   gpio_init_struct.Pull = GPIO_NOPULL;
@@ -105,35 +111,16 @@ void RC5_Encode_Init(void)
   gpio_init_struct.Alternate = IR_GPIO_AF_HF;
   HAL_GPIO_Init(IR_GPIO_PORT_HF, &gpio_init_struct);
 
-  /* DeInit TIM16 (High Frequency Timer) */
-  HAL_TIM_OC_DeInit(&TimHandleHF);
-
-  /* Configure High Frequency Timer for 38kHz carrier */
-  /* Time base configuration */
-  TimHandleHF.Init.Period = IR_ENC_HPERIOD_RC5;
-  TimHandleHF.Init.Prescaler = 0x00;
-  TimHandleHF.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  TimHandleHF.Init.CounterMode = TIM_COUNTERMODE_UP;
-  TimHandleHF.Init.RepetitionCounter = 0;
-  TimHandleHF.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  HAL_TIM_Base_Init(&TimHandleHF);
-  if (HAL_TIM_OC_Init(&TimHandleHF) != HAL_OK)
-  {
-    /* Initialization Error */
-    Error_Handler();
-  }
-
-  /* Output Compare PWM Mode configuration: Channel 1 */
+  /* Configure TIM16 Channel 1 for 38kHz carrier PWM */
   ch_config.OCMode = TIM_OCMODE_PWM1;
-  ch_config.Pulse = IR_ENC_HPERIOD_RC5 / 4; /* 25% duty cycle (as per teacher's instruction) */
+  ch_config.Pulse = IR_ENC_HPERIOD_RC5 / 4; /* 25% duty cycle */
   ch_config.OCPolarity = TIM_OCPOLARITY_HIGH;
   ch_config.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   ch_config.OCFastMode = TIM_OCFAST_DISABLE;
   ch_config.OCIdleState = TIM_OCIDLESTATE_RESET;
   ch_config.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_OC_ConfigChannel(&TimHandleHF, &ch_config, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&TimHandleHF, &ch_config, TIM_CHANNEL_1) != HAL_OK)
   {
-    /* Configuration Error */
     Error_Handler();
   }
 
@@ -143,25 +130,7 @@ void RC5_Encode_Init(void)
     Error_Handler();
   }
 
-  /* DeInit TIM15 (Low Frequency Timer) */
-  HAL_TIM_OC_DeInit(&TimHandleLF);
-
-  /* Configure Low Frequency Timer for RC5 bit timing (889us) */
-  /* Time base configuration */
-  TimHandleLF.Init.Prescaler = TIM_PRESCALER;
-  TimHandleLF.Init.CounterMode = TIM_COUNTERMODE_UP;
-  TimHandleLF.Init.Period = IR_ENC_LPERIOD_RC5;
-  TimHandleLF.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  TimHandleLF.Init.RepetitionCounter = 0;
-  TimHandleLF.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  HAL_TIM_Base_Init(&TimHandleLF);
-  if (HAL_TIM_OC_Init(&TimHandleLF) != HAL_OK)
-  {
-    /* Initialization Error */
-    Error_Handler();
-  }
-
-  /* Channel 1 Configuration in Timing mode */
+  /* Configure TIM15 Channel 1 for Manchester envelope (Timing mode) */
   ch_config.OCMode = TIM_OCMODE_TIMING;
   ch_config.Pulse = IR_ENC_LPERIOD_RC5;
   ch_config.OCPolarity = TIM_OCPOLARITY_HIGH;
@@ -171,16 +140,14 @@ void RC5_Encode_Init(void)
   ch_config.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_OC_ConfigChannel(&TimHandleLF, &ch_config, TIM_CHANNEL_1) != HAL_OK)
   {
-    /* Configuration Error */
     Error_Handler();
   }
 
-  /* Configure interrupt for Low Frequency Timer */
+  /* Configure and enable interrupt for Low Frequency Timer */
   HAL_NVIC_SetPriority(IR_TIM_LF_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(IR_TIM_LF_IRQn);
 
-  /* TIM Disable initially */
-  __HAL_TIM_DISABLE(&TimHandleLF);
+  /* TIM15 initially disabled - will be started by RC5_Encode_SendFrame() */
 }
 
 /**
