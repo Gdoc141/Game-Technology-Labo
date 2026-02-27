@@ -131,7 +131,7 @@ void RC5_Encode_Init(void)
   ch_config.OCFastMode = TIM_OCFAST_DISABLE;
   ch_config.OCIdleState = TIM_OCIDLESTATE_RESET;
   ch_config.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_OC_ConfigChannel(&TimHandleHF, &ch_config, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&TimHandleHF, &ch_config, TIM_CHANNEL_1) != HAL_OK)
   {
     /* Configuration Error */
     Error_Handler();
