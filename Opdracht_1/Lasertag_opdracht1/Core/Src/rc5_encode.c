@@ -143,6 +143,8 @@ void RC5_Encode_Init(void)
     Error_Handler();
   }
 
+  TIM_ForcedOC1Config(TIM_FORCED_INACTIVE);
+
   /* DeInit TIM15 (Low Frequency Timer) */
   HAL_TIM_OC_DeInit(&TimHandleLF);
 
@@ -323,12 +325,22 @@ static uint32_t RC5_ManchesterConvert(uint16_t RC5_BinaryFrameFormat)
 void TIM_ForcedOC1Config(uint32_t action)
 {
   TIM_TypeDef *TIMx = TimHandleHF.Instance;
+  uint32_t oc_mode;
+
+  if (action == TIM_FORCED_ACTIVE)
+  {
+    oc_mode = TIM_OCMODE_PWM1;
+  }
+  else
+  {
+    oc_mode = TIM_FORCED_INACTIVE;
+  }
   
   /* Disable the Channel 1 */
   TIMx->CCER &= ~TIM_CCER_CC1E;
   
   /* Set or Reset the Output Compare Mode */
-  MODIFY_REG(TIMx->CCMR1, TIM_CCMR1_OC1M, action);
+  MODIFY_REG(TIMx->CCMR1, TIM_CCMR1_OC1M, oc_mode);
   
   /* Enable the Channel 1 */
   TIMx->CCER |= TIM_CCER_CC1E;
