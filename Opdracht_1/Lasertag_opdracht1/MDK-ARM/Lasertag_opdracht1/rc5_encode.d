@@ -22,4 +22,6 @@ lasertag_opdracht1/rc5_encode.o: ..\Core\Src\rc5_encode.c \
   ..\Drivers\STM32L4xx_HAL_Driver\Inc\stm32l4xx_hal_pwr_ex.h \
   ..\Drivers\STM32L4xx_HAL_Driver\Inc\stm32l4xx_hal_tim.h \
   ..\Drivers\STM32L4xx_HAL_Driver\Inc\stm32l4xx_hal_tim_ex.h \
+  ..\Drivers\STM32L4xx_HAL_Driver\Inc\stm32l4xx_hal_uart.h \
+  ..\Drivers\STM32L4xx_HAL_Driver\Inc\stm32l4xx_hal_uart_ex.h \
   ..\Core\Inc\rc5_encode.h ..\Core\Inc\ir_common.h
