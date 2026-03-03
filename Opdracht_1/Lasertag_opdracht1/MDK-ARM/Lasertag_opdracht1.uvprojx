@@ -395,6 +395,11 @@
           <GroupName>Application/User/Core</GroupName>
           <Files>
             <File>
+              <FileName>rc5_encode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/rc5_encode.c</FilePath>
+            </File>
+            <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/main.c</FilePath>
@@ -408,11 +413,6 @@
               <FileName>stm32l4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32l4xx_hal_msp.c</FilePath>
-            </File>
-            <File>
-              <FileName>rc5_encode.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Core/Src/rc5_encode.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -503,16 +503,6 @@
               <FileName>stm32l4xx_hal_exti.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_exti.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l4xx_hal_uart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_uart.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l4xx_hal_uart_ex.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_uart_ex.c</FilePath>
             </File>
           </Files>
         </Group>

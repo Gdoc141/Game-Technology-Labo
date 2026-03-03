@@ -1,9 +1,9 @@
 --cpu=Cortex-M4.fp.sp --branchpatch=sdcomp-29491-629360
 "lasertag_opdracht1\startup_stm32l432xx.o"
+"lasertag_opdracht1\rc5_encode.o"
 "lasertag_opdracht1\main.o"
 "lasertag_opdracht1\stm32l4xx_it.o"
 "lasertag_opdracht1\stm32l4xx_hal_msp.o"
-"lasertag_opdracht1\rc5_encode.o"
 "lasertag_opdracht1\stm32l4xx_hal_tim.o"
 "lasertag_opdracht1\stm32l4xx_hal_tim_ex.o"
 "lasertag_opdracht1\stm32l4xx_hal.o"
@@ -21,8 +21,6 @@
 "lasertag_opdracht1\stm32l4xx_hal_pwr_ex.o"
 "lasertag_opdracht1\stm32l4xx_hal_cortex.o"
 "lasertag_opdracht1\stm32l4xx_hal_exti.o"
-"lasertag_opdracht1\stm32l4xx_hal_uart.o"
-"lasertag_opdracht1\stm32l4xx_hal_uart_ex.o"
 "lasertag_opdracht1\system_stm32l4xx.o"
 --strict --scatter "Lasertag_opdracht1\Lasertag_opdracht1.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols

@@ -186,8 +186,8 @@ typedef enum
 #define MESSAGE1  " LEFT | RIGHT| DOWN  | SEL  "
 #define MESSAGE2  " PREV | NEXT | SWITCH| SEND "
 
-#define TIM_FORCED_ACTIVE      ((uint16_t)0x0050)
-#define TIM_FORCED_INACTIVE    ((uint16_t)0x0040)
+#define TIM_FORCED_ACTIVE      ((uint16_t)0x0060)  /* PWM mode 1 - generates 38kHz carrier */
+#define TIM_FORCED_INACTIVE    ((uint16_t)0x0040)  /* Forced inactive - no carrier */
 
 /**
   * @}
