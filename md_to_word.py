@@ -4,6 +4,7 @@ Gebruik: python md_to_word.py
 """
 
 import re
+import os
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -268,6 +269,76 @@ def convert(md_path, out_path):
             run.italic = True
             run.font.color.rgb = RGBColor(0x40, 0x40, 0x40)
             i += 1
+            continue
+
+        # ── Afbeelding ![alt](path)
+        img_match = re.match(r'^!\[([^\]]*)\]\(([^\)]+)\)$', line.strip())
+        if img_match:
+            alt_text = img_match.group(1)
+            img_path = img_match.group(2)
+            # Maak absoluut pad relatief aan het MD-bestand
+            base_dir = os.path.dirname(md_path)
+            abs_img  = os.path.join(base_dir, img_path)
+            if os.path.isfile(abs_img):
+                try:
+                    para = doc.add_paragraph()
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = para.add_run()
+                    run.add_picture(abs_img, width=Cm(14))
+                    # Caption onder afbeelding
+                    caption = doc.add_paragraph()
+                    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    caption_run = caption.add_run(alt_text)
+                    caption_run.italic = True
+                    caption_run.font.size = Pt(10)
+                    caption_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+                except Exception as e:
+                    # Foutafhandeling als afbeelding niet geladen kan worden
+                    para = doc.add_paragraph()
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = para.add_run(f"[Afbeelding: {alt_text}]")
+                    run.italic = True
+                    run.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+            else:
+                para = doc.add_paragraph()
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = para.add_run(f"[Afbeelding: {alt_text} - bestand niet gevonden]")
+                run.italic = True
+                run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+            i += 1
+            continue
+
+        # ── LaTeX math blok ($$...$$)
+        if line.strip().startswith("$$"):
+            math_lines = []
+            rest = line.strip()[2:]
+            if rest.endswith("$$") and len(rest) > 2:
+                # Inline $$formule$$
+                math_lines.append(rest[:-2].strip())
+                i += 1
+            elif rest.strip() == "" or (rest.strip() == "$$"):
+                # Blok: $$ op eigen regel
+                i += 1
+                while i < len(lines):
+                    ml = lines[i].rstrip("\n").strip()
+                    if ml == "$$":
+                        i += 1
+                        break
+                    math_lines.append(ml)
+                    i += 1
+            else:
+                # Enkel openings-$$ op zelfde regel als formule
+                math_lines.append(rest.strip())
+                i += 1
+            math_text = " ".join(math_lines)
+            para = doc.add_paragraph()
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            para.paragraph_format.space_before = Pt(4)
+            para.paragraph_format.space_after  = Pt(4)
+            run = para.add_run(math_text)
+            run.font.name  = "Cambria Math"
+            run.font.size  = Pt(11)
+            run.font.italic = True
             continue
 
         # ── Gewone paragraaf
