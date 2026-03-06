@@ -63,8 +63,17 @@ static void MX_TIM2_Init(void);
 
 /**
  * @brief  Leid printf() om naar USART2 (ST-Link VCP -> PuTTY).
+ *         __io_putchar = GCC/newlib (CubeIDE)
+ *         fputc        = Keil MicroLib
  */
 int __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 100);
+  return ch;
+}
+
+#include <stdio.h>
+int fputc(int ch, FILE *f)
 {
   HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 100);
   return ch;
@@ -81,51 +90,29 @@ int main(void)
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
-  /* MCU Configuration -------------------------------------------------------*/
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_TIM2_Init();
 
   /* USER CODE BEGIN 2 */
-
-  /* Schakel stdio-buffering uit zodat printf direct zichtbaar is in PuTTY */
   setvbuf(stdout, NULL, _IONBF, 0);
 
-  /* Initialiseer RC5 timing variabelen (32 MHz / prescaler 31 = 1 MHz timer) */
   RC5_Init_Timing();
 
-  /* Start TIM2 Input Capture interrupts op CH1 (rising) en CH2 (falling) */
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
-
-  /* Activeer update interrupt alleen bij overflow (niet bij slave reset) */
   __HAL_TIM_URS_ENABLE(&htim2);
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
-  printf("[RC5] LaserTag IR Receiver gestart\r\n");
-  printf("[RC5] Richt een RC5 afstandsbediening op de TSOP4838 en druk een knop\r\n");
-
+  printf("[RC5] LaserTag ontvanger gestart\r\n");
   /* USER CODE END 2 */
 
-  /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  RC5_Frame_t frame = {0};
-
+  RC5_Frame_t frame;
   while (1)
   {
-    /* Controleer of een volledig RC5 frame ontvangen is */
     if (RC5FrameReceived == YES)
     {
       RC5_Decode(&frame);
@@ -133,7 +120,6 @@ int main(void)
              frame.Address, frame.Command, frame.ToggleBit, frame.FieldBit);
     }
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

@@ -26,9 +26,8 @@
 #define  RC5LOWSTATE      ((uint8_t )0x01)   /* RC5 low level definition*/
 
 /* Private_Function_Prototypes -----------------------------------------------*/
-static uint16_t RC5_BinFrameGeneration(uint8_t RC5_Address, uint8_t RC5_Instruction, RC5_Ctrl_t RC5_Ctrl);
-static uint32_t RC5_ManchesterConvert(uint16_t RC5_BinaryFrameFormat);
-static void RC5_Encode_DeInit(void);
+/* RC5_Encode_Init en gerelateerde functies zijn board-specifiek (TIM16/17, IR GPIO). */
+/* Ze worden niet gebruikt in dit project en zijn uitgeschakeld via #if 0.          */
 
 /* Private_Variables ---------------------------------------------------------*/
 uint8_t RC5RealFrameLength = 14;
@@ -41,11 +40,9 @@ RC5_Ctrl_t RC5Ctrl1 = RC5_CTRL_RESET;
 
 /* Exported_Functions--------------------------------------------------------*/
 
-/**
-  * @brief  RCR receiver demo exec.
-  * @param  None
-  * @retval None
-  */
+/* Menu_RC5_Encode_Func verwijderd: was bedoeld voor eval board met LCD. */
+
+#if 0
 void Menu_RC5_Encode_Func(void)
 {
   uint8_t  index = 0;
@@ -221,18 +218,9 @@ void Menu_RC5_Encode_Func(void)
   /* Display menu */
   Menu_DisplayMenu();
 }
+#endif /* 0 */
 
-/**
-  * @brief  De-initializes the peripherals (GPIO, TIM)
-  * @param  None
-  * @retval None
-  */
-static void RC5_Encode_DeInit(void)
-{
-  HAL_TIM_OC_DeInit(&TimHandleLF);
-  HAL_TIM_OC_DeInit(&TimHandleHF);
-  HAL_GPIO_DeInit(GPIOB, GPIO_PIN_9);
-}
+#if 0  /* board-specific: TIM16/TIM17/IR_GPIO_AF_TR niet beschikbaar op Nucleo-32 */
 
 /**
   * @brief Init Hardware (IPs used) for RC5 generation
@@ -469,5 +457,7 @@ static uint32_t RC5_ManchesterConvert(uint16_t RC5_BinaryFrameFormat)
   }
   return (ConvertedMsg);
 }
+
+#endif /* board-specific */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

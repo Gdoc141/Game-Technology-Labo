@@ -32,6 +32,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "rc5_decode.h"
 
 /* Public_Constants ----------------------------------------------------------*/
 const uint8_t* aRC5Devices[32] =
@@ -267,66 +268,10 @@ static void RC5_WriteBit(uint8_t bitVal);
   */
 void RC5_Init_Timing(void)
 {
-  /* Timer clock na prescaler in kHz: 32MHz / 32 = 1MHz = 1000 kHz */
+  /* Timer clock na prescaler in kHz: 32MHz / (31+1) = 1MHz = 1000 kHz */
   TIMCLKValueKHz = 1000;
   RC5TimeOut = TIMCLKValueKHz * RC5_TIME_OUT_US / 1000; /* = 3600 ticks = 3.6 ms */
 
-  TimHandleDEC.Init.ClockDivision = 0;
-  TimHandleDEC.Init.CounterMode = 0;
-  TimHandleDEC.Init.Period = RC5TimeOut;
-  TimHandleDEC.Init.Prescaler = TIM_PRESCALER;
-  TimHandleDEC.Init.RepetitionCounter = 0;
-  HAL_TIM_IC_Init(&TimHandleDEC);
-
-  /* TIM configuration */
-  tim_ic_init.ICPolarity = TIM_ICPOLARITY_RISING;
-  tim_ic_init.ICSelection = TIM_ICSELECTION_INDIRECTTI;
-  tim_ic_init.ICPrescaler = TIM_ICPSC_DIV1;
-  tim_ic_init.ICFilter = 0x0;
-  HAL_TIM_IC_ConfigChannel(&TimHandleDEC, &tim_ic_init, IR_TIM_DEC_CHANNEL_B);
-  tim_ic_init.ICPolarity = TIM_ICPOLARITY_FALLING;
-  tim_ic_init.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  HAL_TIM_IC_ConfigChannel(&TimHandleDEC, &tim_ic_init, IR_TIM_DEC_CHANNEL_A);
-
-  tim_slave_conf.InputTrigger = IR_TIM_DEC_TRIGGER;
-  tim_slave_conf.SlaveMode = TIM_SLAVEMODE_RESET;
-  tim_slave_conf.TriggerPolarity = TIM_TRIGGERPOLARITY_FALLING;
-  tim_slave_conf.TriggerFilter = 0;
-  HAL_TIM_SlaveConfigSynchro( &TimHandleDEC, &tim_slave_conf);
-
-  /* Enable the Master/Slave Mode */
-  tim_master_conf.MasterSlaveMode = TIM_SMCR_MSM;
-  tim_master_conf.MasterOutputTrigger = 0;
-  HAL_TIMEx_MasterConfigSynchronization( &TimHandleDEC, &tim_master_conf);
-
-  /* Configures the TIM Update Request Interrupt source: counter overflow */
-  __HAL_TIM_URS_ENABLE(&TimHandleDEC);
-
-  /* Clear update flag */
-  __HAL_TIM_CLEAR_FLAG( &TimHandleDEC, TIM_FLAG_UPDATE);
-
-  /* Enable TIM Update Event Interrupt Request */
-  /* Enable the CC2/CC1 Interrupt Request */
-  __HAL_TIM_ENABLE_IT( &TimHandleDEC, TIM_FLAG_UPDATE | TIM_IT_CC1 | TIM_IT_CC2);
-
-  /* Enable the timer */
-  __HAL_TIM_ENABLE(&TimHandleDEC);
-
-  if (HAL_TIM_IC_Start_IT(&TimHandleDEC, IR_TIM_DEC_CHANNEL_A) != HAL_OK)
-  {
-    /* Starting Error */
-    while (1)
-    {}
-  }
-
-  if (HAL_TIM_IC_Start_IT(&TimHandleDEC, IR_TIM_DEC_CHANNEL_B) != HAL_OK)
-  {
-    /* Starting Error */
-    while (1)
-    {}
-  }
-
-  /* Bit time range */
   /* Bit time range in timer ticks (1 tick = 1 us bij 1 MHz timer klok) */
   RC5MinT  = (RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 600  ticks */
   RC5MaxT  = (RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 1200 ticks */
