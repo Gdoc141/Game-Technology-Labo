@@ -77,9 +77,18 @@ typedef enum
 /** @defgroup RC5_Exported_Functions
   * @{
   */
-void Menu_RC5Decode_Func(void);
+
+/* Oorspronkelijke publieke functies */
 void RC5_ResetPacket(void);
 void RC5_DataSampling(uint32_t rawPulseLength, uint32_t edge);
+
+/* Toegevoegde functies voor Nucleo-32 integratie */
+void RC5_Init_Timing(void);
+void RC5_Decode(RC5_Frame_t *pIRFrame);
+
+/* Globale variabelen (extern) */
+extern __IO StatusYesOrNo_t RC5FrameReceived; /*!< YES als een compleet RC5 frame ontvangen is */
+extern RC5_Frame_t RC5_FRAME;                 /*!< Laatste gedecodeerde RC5 frame */
 
 /**
   * @}

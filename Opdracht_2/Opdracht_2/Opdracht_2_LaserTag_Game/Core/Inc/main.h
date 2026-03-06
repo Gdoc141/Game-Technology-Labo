@@ -37,6 +37,14 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
 
+/**
+ * @brief Vlag type voor RC5 frame ontvangst (gebruikt door rc5_decode bibliotheek)
+ */
+typedef enum {
+    NO  = 0,
+    YES = 1
+} StatusYesOrNo_t;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

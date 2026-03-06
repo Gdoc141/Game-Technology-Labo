@@ -22,6 +22,7 @@
 #include "stm32l4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "rc5_decode.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -213,5 +214,40 @@ void TIM2_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+ * @brief  TIM2 Input Capture callback – aangeroepen door HAL bij elke capture.
+ *         CH1 (rising edge): meet periode tussen twee stijgende flanken.
+ *         CH2 (falling edge): meet duur van de hoge puls.
+ *         RC5_DataSampling verwerkt de waarde en bepaalt het bitpatroon.
+ */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2)
+  {
+    if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    {
+      /* CH1: stijgende flank – geef periode door als "rising edge" event */
+      RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1), 1);
+    }
+    else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+    {
+      /* CH2: dalende flank – geef pulsbreedte door als "falling edge" event */
+      RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2), 0);
+    }
+  }
+}
+
+/**
+ * @brief  TIM2 overflow callback – aangeroepen als er >3.7ms geen flank komt.
+ *         Reset het huidige RC5 pakket om onvolledig frame te verwerpen.
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2)
+  {
+    RC5_ResetPacket();
+  }
+}
 
 /* USER CODE END 1 */

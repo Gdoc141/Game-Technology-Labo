@@ -250,106 +250,26 @@ RC5_Frame_t RC5_FRAME;
 static uint8_t RC5_GetPulseLength (uint32_t pulseLength);
 static void RC5_modifyLastBit(RC5_lastBit_t bit);
 static void RC5_WriteBit(uint8_t bitVal);
-static void RC5_DeInit(void);
-static void RC5_Init(void);
-static void RC5_Decode(RC5_Frame_t *rc5_frame);
 
 /* Private_Functions ---------------------------------------------------------*/
 
+/* Menu_RC5Decode_Func verwijderd: was bedoeld voor eval board met LCD.
+ * Gebruik RC5_Init_Timing() + RC5_Decode() in je eigen main.c. */
+
+/* RC5_DeInit verwijderd: timer deinit wordt beheerd door CubeMX/HAL. */
+
 /**
-  * @brief  RCR receiver demo exec.
+  * @brief  Initialiseer de RC5 timing variabelen voor Nucleo-32 (32 MHz, prescaler 31).
+  *         Aanroepen in main() na MX_TIM2_Init() en voor HAL_TIM_IC_Start_IT().
+  *         Timer klok na prescaler: 32 MHz / (31+1) = 1 MHz -> 1 tick = 1 us.
   * @param  None
   * @retval None
   */
-void Menu_RC5Decode_Func(void)
+void RC5_Init_Timing(void)
 {
-  while (Menu_ReadKey() != NOKEY)
-  {}
-  /* Clear the LCD */
-  BSP_LCD_Clear(LCD_COLOR_WHITE);
-
-  BSP_LCD_SetFont(&Font24);
-  /* Set the LCD Back Color */
-  BSP_LCD_SetBackColor(LCD_COLOR_BLUE);
-  /* Set the LCD Text Color */
-  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-  BSP_LCD_DisplayStringAtLine(0, (uint8_t*)"   RC5 Receiver   ");
-  BSP_LCD_DisplayStringAtLine(9, (uint8_t*)"Press Key to exit ");
-
-  /* Set the LCD Back Color */
-  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-  /* Set the LCD Text Color */
-  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-
-  /* Initialize the InfraRed application: RC5 */
-  RFDemoStatus = RC5_DEC;
-  RC5_Init();
-
-  while (Menu_ReadKey() != KEY)
-  {
-    /* Decode the RC5 frame */
-    RC5_Decode(&RC5_FRAME);
-  }
-  /* Clear LCD */
-  BSP_LCD_Clear(LCD_COLOR_WHITE);
-
-  /* Exit the RF5 demo */
-  RFDemoStatus = NONE;
-  RC5_DeInit();
-
-  /* Enable the JoyStick interrupt */
-  HAL_NVIC_EnableIRQ(LEFT_JOY_EXTI_IRQn);
-
-  /* Display menu */
-  Menu_DisplayMenu();
-}
-
-/**
-  * @brief  De-initializes the peripherals (RCC,GPIO, TIM)
-  * @param  None
-  * @retval None
-  */
-void RC5_DeInit(void)
-{
-  HAL_TIM_IC_DeInit(&TimHandleDEC);
-  HAL_GPIO_DeInit(IR_GPIO_PORT, IR_GPIO_PIN);
-}
-
-/**
-  * @brief  Initialize the RC5 decoder module ( Time range)
-  * @param  None
-  * @retval None
-  */
-void RC5_Init(void)
-{
-  GPIO_InitTypeDef gpio_init_struct;
-  TIM_IC_InitTypeDef tim_ic_init;
-  TIM_SlaveConfigTypeDef tim_slave_conf;
-  TIM_MasterConfigTypeDef tim_master_conf;
-
-  /*  Clock Configuration for TIMER */
-  IR_TIM_CLK();
-
-  TimHandleDEC.Instance = IR_TIM;
-
-  /* Enable Button GPIO clock */
-  IR_GPIO_PORT_CLK();
-
-  /* Pin configuration: input floating */
-  gpio_init_struct.Pin = IR_GPIO_PIN;
-  gpio_init_struct.Mode = GPIO_MODE_AF_OD;
-  gpio_init_struct.Pull = GPIO_NOPULL;
-  gpio_init_struct.Speed = GPIO_SPEED_FREQ_HIGH;
-  gpio_init_struct.Alternate = IR_GPIO_AF_REC;
-  HAL_GPIO_Init(IR_GPIO_PORT, &gpio_init_struct);
-
-  /* Enable the TIMx global Interrupt */
-  HAL_NVIC_SetPriority(IR_TIM_IRQn, 0, 1);
-  HAL_NVIC_EnableIRQ(IR_TIM_IRQn);
-
-  /* Timer Clock */
-  TIMCLKValueKHz = TIM_GetCounterCLKValue() / 1000;
-  RC5TimeOut = TIMCLKValueKHz * RC5_TIME_OUT_US / 1000;
+  /* Timer clock na prescaler in kHz: 32MHz / 32 = 1MHz = 1000 kHz */
+  TIMCLKValueKHz = 1000;
+  RC5TimeOut = TIMCLKValueKHz * RC5_TIME_OUT_US / 1000; /* = 3600 ticks = 3.6 ms */
 
   TimHandleDEC.Init.ClockDivision = 0;
   TimHandleDEC.Init.CounterMode = 0;
@@ -407,54 +327,45 @@ void RC5_Init(void)
   }
 
   /* Bit time range */
-  RC5MinT = (RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;
-  RC5MaxT = (RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;
-  RC5Min2T = (2 * RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;
-  RC5Max2T = (2 * RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;
+  /* Bit time range in timer ticks (1 tick = 1 us bij 1 MHz timer klok) */
+  RC5MinT  = (RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 600  ticks */
+  RC5MaxT  = (RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 1200 ticks */
+  RC5Min2T = (2 * RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000; /* 1500 ticks */
+  RC5Max2T = (2 * RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000; /* 2100 ticks */
 
-  /* Default state */
+  /* Standaard begintoestand */
   RC5_ResetPacket();
 }
 
 /**
-  * @brief  Decode the IR frame (ADDRESS, COMMAND) when all the frame is
-  *         received, the IRFrameReceived will equal to YES.
-  *         The IRFrameReceived is set to YES inside the  IR_DataSampling()
-  *         function when the whole IR frame is received without any error.
-  *         If any received bit timing is out of the defined range, the IR packet
-  *         is reset and the IRFrameReceived is set to NO.
-  *         After the IR received display, the IRFrameReceived is set NO.
-  *         User can check the IRFrameReceived variable status to verify if there
-  *         is a new IR frame already received.
-  * @param  pIRFrame: pointer to RC5_Frame_t structure that contains the
-  *         the IR protocol fields (Address, Command,...).
+  * @brief  Decodeer het ontvangen RC5 frame in adres, commando en toggle bit.
+  *         Aanroepen wanneer RC5FrameReceived == YES.
+  *         Reset RC5FrameReceived automatisch na decoderen.
+  * @param  pIRFrame: pointer naar RC5_Frame_t voor het resultaat
   */
 void RC5_Decode(RC5_Frame_t *pIRFrame)
 {
-  /* If frame received */
+  /* Alleen decoderen als er een volledig frame ontvangen is */
   if (RC5FrameReceived != NO)
   {
-    RC5_Data = RC5TmpPacket.data ;
-    /* RC5 frame field decoding */
-    pIRFrame->FieldBit = (RC5TmpPacket.data >> 12) & 0x1;
+    RC5_Data = RC5TmpPacket.data;
+    /* RC5 frame velden decoderen */
+    pIRFrame->FieldBit  = (RC5TmpPacket.data >> 12) & 0x1;
     pIRFrame->ToggleBit = (RC5TmpPacket.data >> 11) & 0x1;
-    pIRFrame->Address = (RC5TmpPacket.data >> 6) & 0x1F;
-    pIRFrame->Command = (uint8_t)((RC5TmpPacket.data) & (uint8_t) 0x3F);
+    pIRFrame->Address   = (RC5TmpPacket.data >>  6) & 0x1F;
+    pIRFrame->Command   = (uint8_t)((RC5TmpPacket.data) & (uint8_t)0x3F);
 
-    /* Check if command ranges between 64 to 127:Upper Field */
+    /* Als field bit = 0: commando ligt in het bovenste bereik (64-127) */
     if (((RC5TmpPacket.data >> 12) & 0x1) != 0x01)
     {
-      pIRFrame->Command =  (1 << 6) | pIRFrame->Command;
+      pIRFrame->Command = (1 << 6) | pIRFrame->Command;
     }
-    /* Default state */
+    /* Reset vlag en pakket voor volgend frame */
     RC5FrameReceived = NO;
     RC5_ResetPacket();
 
-    /* Display RC5 message */
-    BSP_LCD_SetFont(&Font20);
-    BSP_LCD_DisplayStringAtLine(6, (uint8_t*)aRC5Commands[pIRFrame->Command]);
-    BSP_LCD_DisplayStringAtLine(7, (uint8_t*)aRC5Devices[pIRFrame->Address]);
-    BSP_LCD_SetFont(&Font24);
+    /* Sla ook op in globale struct */
+    RC5_FRAME = *pIRFrame;
   }
 }
 
