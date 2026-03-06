@@ -73,10 +73,10 @@ Opdracht_2/
 
 1. Open het `.ioc` bestand in CubeIDE (dubbelklik)
 2. Ga naar **Clock Configuration** tab
-3. Stel de HCLK in op **80 MHz** (via PLL, HSI als bron)
-4. Zorg dat APB1 (waarop TIM2 hangt) ook op **80 MHz** loopt
+3. Stel de HCLK in op **32 MHz** (via PLL, HSI als bron)
+4. Zorg dat APB1 (waarop TIM2 hangt) ook op **32 MHz** loopt
 
-> Dit is nodig voor een nauwkeurige timermeting van 889 µs (RC5 halve bitperiode).
+> Dit is dezelfde kloksnelheid als opdracht 1. Nodig voor een nauwkeurige timermeting van 889 µs (RC5 halve bitperiode).
 
 ### Stap 2 – TIM2 configureren als PWM Input
 
@@ -94,7 +94,7 @@ In de **Parameter Settings** van TIM2:
 
 | Parameter | Waarde | Uitleg |
 |-----------|--------|--------|
-| Prescaler | `79` | 80 MHz / (79+1) = **1 MHz** → 1 tick = 1 µs |
+| Prescaler | `31` | 32 MHz / (31+1) = **1 MHz** → 1 tick = 1 µs |
 | Counter Period | `65535` | Maximale telwaarde (16-bit) |
 | Polarity (CH1) | `Falling Edge` | Meet bij neergaande flank |
 | Polarity (CH2) | `Rising Edge` | Meet bij stijgende flank |
