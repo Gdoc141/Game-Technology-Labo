@@ -97,8 +97,6 @@ int main(void)
   MX_TIM2_Init();
 
   /* USER CODE BEGIN 2 */
-  setvbuf(stdout, NULL, _IONBF, 0);
-
   RC5_Init_Timing();
 
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
@@ -106,18 +104,21 @@ int main(void)
   __HAL_TIM_URS_ENABLE(&htim2);
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
-  printf("[RC5] LaserTag ontvanger gestart\r\n");
+  char msg[] = "[RC5] LaserTag ontvanger gestart\r\n";
+  HAL_UART_Transmit(&huart2, (uint8_t*)msg, sizeof(msg)-1, 1000);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN WHILE */
   RC5_Frame_t frame;
+  char buf[80];
   while (1)
   {
     if (RC5FrameReceived == YES)
     {
       RC5_Decode(&frame);
-      printf("[RC5] Adres: 0x%02X | Commando: 0x%02X | Toggle: %d | Field: %d\r\n",
-             frame.Address, frame.Command, frame.ToggleBit, frame.FieldBit);
+      int len = sprintf(buf, "[RC5] Adres: 0x%02X | Commando: 0x%02X | Toggle: %d | Field: %d\r\n",
+                        frame.Address, frame.Command, frame.ToggleBit, frame.FieldBit);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buf, len, 1000);
     }
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */

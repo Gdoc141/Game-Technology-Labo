@@ -227,12 +227,12 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   {
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
     {
-      /* CH1: stijgende flank – geef periode door als "rising edge" event */
+      /* CH1: stijgende flank */
       RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1), 1);
     }
     else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
     {
-      /* CH2: dalende flank – geef pulsbreedte door als "falling edge" event */
+      /* CH2: dalende flank */
       RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2), 0);
     }
   }
