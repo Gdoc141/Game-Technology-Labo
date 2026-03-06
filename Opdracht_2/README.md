@@ -43,6 +43,14 @@ Opdracht_2/
 | 2 | GND | → GND |
 | 3 | VS   | → 100 Ω weerstand → 3.3V |
 
+### Volledige pinnenlijst Nucleo-32
+
+| STM32 Pin | Functie | Verbinding |
+|-----------|---------|-----------|
+| PA0 | TIM2_CH1 | TSOP4838 OUT (pin 1) |
+| PA2 | USART2_TX | Intern verbonden met ST-Link VCP (RX) |
+| PA15 | USART2_RX | Intern verbonden met ST-Link VCP (TX) |
+
 ### Aanbevolen filtercircuit op VS (pin 3)
 
 ```
@@ -111,6 +119,25 @@ In de **Parameter Settings** van TIM2:
 1. Ga naar **NVIC Settings** tab (binnen TIM2 configuratie)
 2. Zet een vinkje bij:
    - `TIM2 global interrupt` → **Enabled**
+
+### Stap 5b – USART2 configureren (UART debugging)
+
+1. Ga naar **Connectivity → USART2**
+2. Stel in:
+   - **Mode:** `Asynchronous`
+3. In **Parameter Settings**:
+
+| Parameter | Waarde |
+|-----------|--------|
+| Baud Rate | `115200 Bits/s` |
+| Word Length | `8 Bits` |
+| Parity | `None` |
+| Stop Bits | `1` |
+| Data Direction | `Receive and Transmit` |
+| Over Sampling | `16 Samples` |
+| Hardware Flow Control | `None` |
+
+> PA2 (TX) en PA15 (RX) worden automatisch ingesteld. Dit zijn de pins intern verbonden met de ST-Link VCP — je hoeft geen extra kabels te leggen.
 
 ### Stap 6 – Code genereren
 
