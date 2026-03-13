@@ -33,6 +33,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define RC5_REPEAT_INTERVAL_MS 120U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,6 +47,9 @@ TIM_HandleTypeDef htim15;
 TIM_HandleTypeDef htim16;
 
 /* USER CODE BEGIN PV */
+
+static uint32_t last_send_tick = 0;
+static RC5_Ctrl_t rc5_toggle = RC5_CTRL_RESET;
 
 /* USER CODE END PV */
 
@@ -110,16 +115,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    
-    /* Send RC5 command every 1 second (simulating button press) */
-    HAL_Delay(1000);
-    
-    /* Toggle LED */
-    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-    
-    /* Send RC5 frame: Address=0 (TV), Command=12 (Volume Up) */
-    /* This will show the envelope (PA2) and carrier (PA6) on the scope */
-    RC5_Encode_SendFrame(0, 12, RC5_CTRL_RESET);
+
+    /* Repeat transmission at a configurable rate. */
+    if ((HAL_GetTick() - last_send_tick) >= RC5_REPEAT_INTERVAL_MS)
+    {
+      HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+
+      /* Send RC5 frame: Address=0, Command=12 */
+      RC5_Encode_SendFrame(0, 12, rc5_toggle);
+      rc5_toggle = (rc5_toggle == RC5_CTRL_RESET) ? RC5_CTRL_SET : RC5_CTRL_RESET;
+
+      last_send_tick = HAL_GetTick();
+    }
   }
   /* USER CODE END 3 */
 }

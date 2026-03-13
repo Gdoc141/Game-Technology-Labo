@@ -33,6 +33,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define RC5_MIN_1T_US 600U
+#define RC5_MAX_1T_US 1200U
+#define RC5_MIN_2T_US 1500U
+#define RC5_MAX_2T_US 2100U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,6 +51,11 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+extern volatile uint32_t g_rc5_edge_count;
+extern volatile uint32_t g_rc5_last_rise_us;
+extern volatile uint32_t g_rc5_last_fall_us;
+extern volatile uint8_t g_rc5_new_pulse;
 
 /* USER CODE END PV */
 
@@ -110,15 +120,59 @@ int main(void)
 
   /* USER CODE BEGIN WHILE */
   RC5_Frame_t frame;
-  char buf[80];
+  char buf[128];
+  uint32_t last_status_tick = HAL_GetTick();
+  uint32_t last_debug_tick = HAL_GetTick();
+  uint32_t last_edge_count = g_rc5_edge_count;
   while (1)
   {
+    if ((g_rc5_new_pulse != 0U) && ((HAL_GetTick() - last_debug_tick) >= 120U))
+    {
+      uint32_t rise_us = g_rc5_last_rise_us;
+      uint32_t fall_us = g_rc5_last_fall_us;
+      const char *rise_class = ((rise_us >= RC5_MIN_1T_US) && (rise_us <= RC5_MAX_1T_US)) ? "1T" :
+                               (((rise_us >= RC5_MIN_2T_US) && (rise_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
+      const char *fall_class = ((fall_us >= RC5_MIN_1T_US) && (fall_us <= RC5_MAX_1T_US)) ? "1T" :
+                               (((fall_us >= RC5_MIN_2T_US) && (fall_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
+
+      int dbg_len = sprintf(buf,
+                            "[RC5DBG] edges=%lu rise=%luus(%s) fall=%luus(%s)\r\n",
+                            (unsigned long)g_rc5_edge_count,
+                            (unsigned long)rise_us,
+                            rise_class,
+                            (unsigned long)fall_us,
+                            fall_class);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buf, dbg_len, 1000);
+
+      g_rc5_new_pulse = 0;
+      last_debug_tick = HAL_GetTick();
+      last_status_tick = HAL_GetTick();
+    }
+
+    if (g_rc5_edge_count != last_edge_count)
+    {
+      char edge_msg[] = "[RC5] Signaal komt binnen (ruwe pulsen)\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)edge_msg, sizeof(edge_msg) - 1, 1000);
+      last_edge_count = g_rc5_edge_count;
+      last_status_tick = HAL_GetTick();
+    }
+
     if (RC5FrameReceived == YES)
     {
+      char translate_msg[] = "[RC5] Signaal wordt vertaald\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)translate_msg, sizeof(translate_msg) - 1, 1000);
+
       RC5_Decode(&frame);
       int len = sprintf(buf, "[RC5] Adres: 0x%02X | Commando: 0x%02X | Toggle: %d | Field: %d\r\n",
                         frame.Address, frame.Command, frame.ToggleBit, frame.FieldBit);
       HAL_UART_Transmit(&huart2, (uint8_t*)buf, len, 1000);
+      last_status_tick = HAL_GetTick();
+    }
+    else if ((HAL_GetTick() - last_status_tick) >= 1000U)
+    {
+      char alive_msg[] = "[RC5] Geen geldig frame ontvangen\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)alive_msg, sizeof(alive_msg) - 1, 1000);
+      last_status_tick = HAL_GetTick();
     }
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */

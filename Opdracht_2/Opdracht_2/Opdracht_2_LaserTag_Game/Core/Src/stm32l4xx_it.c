@@ -43,6 +43,11 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 
+volatile uint32_t g_rc5_edge_count = 0;
+volatile uint32_t g_rc5_last_rise_us = 0;
+volatile uint32_t g_rc5_last_fall_us = 0;
+volatile uint8_t g_rc5_new_pulse = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -228,12 +233,18 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
     {
       /* CH1: stijgende flank */
-      RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1), 1);
+      g_rc5_last_rise_us = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+      g_rc5_edge_count++;
+      g_rc5_new_pulse = 1;
+      RC5_DataSampling(g_rc5_last_rise_us, 1);
     }
     else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
     {
       /* CH2: dalende flank */
-      RC5_DataSampling(HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2), 0);
+      g_rc5_last_fall_us = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+      g_rc5_edge_count++;
+      g_rc5_new_pulse = 1;
+      RC5_DataSampling(g_rc5_last_fall_us, 0);
     }
   }
 }
