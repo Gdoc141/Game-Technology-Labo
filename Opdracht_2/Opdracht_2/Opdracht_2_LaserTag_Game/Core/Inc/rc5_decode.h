@@ -89,6 +89,7 @@ void RC5_Decode(RC5_Frame_t *pIRFrame);
 /* Globale variabelen (extern) */
 extern __IO StatusYesOrNo_t RC5FrameReceived; /*!< YES als een compleet RC5 frame ontvangen is */
 extern RC5_Frame_t RC5_FRAME;                 /*!< Laatste gedecodeerde RC5 frame */
+extern __IO RC5_Packet_t RC5TmpPacket;        /*!< Lopende packet-opbouw voor debug */
 
 /**
   * @}

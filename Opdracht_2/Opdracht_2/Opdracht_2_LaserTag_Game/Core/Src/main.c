@@ -33,10 +33,12 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define RC5_MIN_1T_US 600U
-#define RC5_MAX_1T_US 1200U
-#define RC5_MIN_2T_US 1500U
-#define RC5_MAX_2T_US 2100U
+#define RX_FW_TAG "RXDBG-V7"
+
+#define RC5_MIN_1T_US 629U
+#define RC5_MAX_1T_US 1149U
+#define RC5_MIN_2T_US 1518U
+#define RC5_MAX_2T_US 2038U
 
 /* USER CODE END PD */
 
@@ -114,34 +116,56 @@ int main(void)
   __HAL_TIM_URS_ENABLE(&htim2);
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
-  char msg[] = "[RC5] LaserTag ontvanger gestart\r\n";
-  HAL_UART_Transmit(&huart2, (uint8_t*)msg, sizeof(msg)-1, 1000);
+  char boot_buf[128];
+  int boot_len = sprintf(boot_buf,
+                         "[RC5] %s gestart (active-low input) build=%s %s\r\n",
+                         RX_FW_TAG,
+                         __DATE__,
+                         __TIME__);
+  HAL_UART_Transmit(&huart2, (uint8_t*)boot_buf, boot_len, 1000);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN WHILE */
   RC5_Frame_t frame;
   char buf[128];
+  uint32_t dbg_counter = 0;
   uint32_t last_status_tick = HAL_GetTick();
   uint32_t last_debug_tick = HAL_GetTick();
   uint32_t last_edge_count = g_rc5_edge_count;
   while (1)
   {
-    if ((g_rc5_new_pulse != 0U) && ((HAL_GetTick() - last_debug_tick) >= 120U))
+    if ((g_rc5_new_pulse != 0U) && ((HAL_GetTick() - last_debug_tick) >= 80U))
     {
       uint32_t rise_us = g_rc5_last_rise_us;
       uint32_t fall_us = g_rc5_last_fall_us;
+      uint16_t packet_data = RC5TmpPacket.data;
+      uint8_t bits_left = RC5TmpPacket.bitCount;
+      uint8_t bits_done = (bits_left <= 12U) ? (uint8_t)(12U - bits_left) : 0U;
+      char bitview[14];
+      for (uint8_t i = 0; i < 13U; i++)
+      {
+        bitview[i] = (((packet_data >> (12U - i)) & 0x1U) != 0U) ? '1' : '0';
+      }
+      bitview[13] = '\0';
       const char *rise_class = ((rise_us >= RC5_MIN_1T_US) && (rise_us <= RC5_MAX_1T_US)) ? "1T" :
                                (((rise_us >= RC5_MIN_2T_US) && (rise_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
       const char *fall_class = ((fall_us >= RC5_MIN_1T_US) && (fall_us <= RC5_MAX_1T_US)) ? "1T" :
                                (((fall_us >= RC5_MIN_2T_US) && (fall_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
 
       int dbg_len = sprintf(buf,
-                            "[RC5DBG] edges=%lu rise=%luus(%s) fall=%luus(%s)\r\n",
+                            "[RC5DBG][%lu] edges=%lu rise=%luus(%s) fall=%luus(%s) bits=%s done=%u left=%u data=0x%04X st=0x%02X lb=%u\r\n",
+                            (unsigned long)dbg_counter++,
                             (unsigned long)g_rc5_edge_count,
                             (unsigned long)rise_us,
                             rise_class,
                             (unsigned long)fall_us,
-                            fall_class);
+                            fall_class,
+                            bitview,
+                            (unsigned int)bits_done,
+                            (unsigned int)bits_left,
+                            packet_data,
+                            (unsigned int)RC5TmpPacket.status,
+                            (unsigned int)RC5TmpPacket.lastBit);
       HAL_UART_Transmit(&huart2, (uint8_t*)buf, dbg_len, 1000);
 
       g_rc5_new_pulse = 0;
@@ -151,8 +175,6 @@ int main(void)
 
     if (g_rc5_edge_count != last_edge_count)
     {
-      char edge_msg[] = "[RC5] Signaal komt binnen (ruwe pulsen)\r\n";
-      HAL_UART_Transmit(&huart2, (uint8_t*)edge_msg, sizeof(edge_msg) - 1, 1000);
       last_edge_count = g_rc5_edge_count;
       last_status_tick = HAL_GetTick();
     }
@@ -170,8 +192,13 @@ int main(void)
     }
     else if ((HAL_GetTick() - last_status_tick) >= 1000U)
     {
-      char alive_msg[] = "[RC5] Geen geldig frame ontvangen\r\n";
-      HAL_UART_Transmit(&huart2, (uint8_t*)alive_msg, sizeof(alive_msg) - 1, 1000);
+      int alive_len = sprintf(buf,
+                              "[RC5][%lu] %s build=%s %s Geen geldig frame ontvangen\r\n",
+                              (unsigned long)dbg_counter++,
+                              RX_FW_TAG,
+                              __DATE__,
+                              __TIME__);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buf, alive_len, 1000);
       last_status_tick = HAL_GetTick();
     }
     /* USER CODE END WHILE */
@@ -283,7 +310,7 @@ static void MX_TIM2_Init(void)
   sSlaveConfig.InputTrigger = TIM_TS_TI1FP1;
   sSlaveConfig.TriggerPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sSlaveConfig.TriggerPrescaler = TIM_ICPSC_DIV1;
-  sSlaveConfig.TriggerFilter = 0;
+  sSlaveConfig.TriggerFilter = 8;
   if (HAL_TIM_SlaveConfigSynchro(&htim2, &sSlaveConfig) != HAL_OK)
   {
     Error_Handler();
@@ -291,7 +318,7 @@ static void MX_TIM2_Init(void)
   sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
+  sConfigIC.ICFilter = 8;
   if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
