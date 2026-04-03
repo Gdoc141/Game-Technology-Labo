@@ -210,8 +210,10 @@ const uint8_t* aRC5Commands[128] =
 #define RC5_2T_TIME                          ((uint8_t)0x01)
 #define RC5_WRONG_TIME                       ((uint8_t)0xFF)
 #define RC5_TIME_OUT_US                      ((uint32_t)3600)
-#define RC5_T_US                             ((uint32_t)889)     /*!< Half bit period */
-#define RC5_T_TOLERANCE_US                   ((uint32_t)260)    /*!< Wider tolerance for measured jitter */
+#define RC5_MIN_1T_US                        ((uint32_t)640)
+#define RC5_MAX_1T_US                        ((uint32_t)1140)
+#define RC5_MIN_2T_US                        ((uint32_t)1340)
+#define RC5_MAX_2T_US                        ((uint32_t)2220)
 #define RC5_NUMBER_OF_VALID_PULSE_LENGTH     ((uint8_t)2)
 #define RC5_PACKET_BIT_COUNT                 ((uint8_t)13)      /*!< Field+toggle+address+command bits */
 #define RC5_PACKET_STATUS_EMPTY              ((uint8_t)(1 << 0))
@@ -272,11 +274,11 @@ void RC5_Init_Timing(void)
   TIMCLKValueKHz = 1000;
   RC5TimeOut = TIMCLKValueKHz * RC5_TIME_OUT_US / 1000; /* = 3600 ticks = 3.6 ms */
 
-  /* Bit time range in timer ticks (1 tick = 1 us bij 1 MHz timer klok) */
-  RC5MinT  = (RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 629  ticks */
-  RC5MaxT  = (RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000;  /* 1149 ticks */
-  RC5Min2T = (2 * RC5_T_US - RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000; /* 1518 ticks */
-  RC5Max2T = (2 * RC5_T_US + RC5_T_TOLERANCE_US) * TIMCLKValueKHz / 1000; /* 2038 ticks */
+  /* Bit time range from assignment table (1 tick = 1 us bij 1 MHz timer klok). */
+  RC5MinT  = RC5_MIN_1T_US * TIMCLKValueKHz / 1000;  /* 640  ticks */
+  RC5MaxT  = RC5_MAX_1T_US * TIMCLKValueKHz / 1000;  /* 1140 ticks */
+  RC5Min2T = RC5_MIN_2T_US * TIMCLKValueKHz / 1000;  /* 1340 ticks */
+  RC5Max2T = RC5_MAX_2T_US * TIMCLKValueKHz / 1000;  /* 2220 ticks */
 
   /* Standaard begintoestand */
   RC5_ResetPacket();

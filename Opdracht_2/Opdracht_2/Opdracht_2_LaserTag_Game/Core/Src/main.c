@@ -35,10 +35,11 @@
 
 #define RX_FW_TAG "RXDBG-V7"
 
-#define RC5_MIN_1T_US 629U
-#define RC5_MAX_1T_US 1149U
-#define RC5_MIN_2T_US 1518U
-#define RC5_MAX_2T_US 2038U
+#define RC5_MIN_1T_US 640U
+#define RC5_MAX_1T_US 1140U
+#define RC5_MIN_2T_US 1340U
+#define RC5_MAX_2T_US 2220U
+#define RC5_TIMEOUT_US 3600U
 
 /* USER CODE END PD */
 
@@ -57,6 +58,8 @@ UART_HandleTypeDef huart2;
 extern volatile uint32_t g_rc5_edge_count;
 extern volatile uint32_t g_rc5_last_rise_us;
 extern volatile uint32_t g_rc5_last_fall_us;
+extern volatile uint32_t g_rc5_last_edge_us;
+extern volatile uint8_t g_rc5_last_edge_is_rising;
 extern volatile uint8_t g_rc5_new_pulse;
 
 /* USER CODE END PV */
@@ -138,6 +141,8 @@ int main(void)
     {
       uint32_t rise_us = g_rc5_last_rise_us;
       uint32_t fall_us = g_rc5_last_fall_us;
+      uint32_t edge_us = g_rc5_last_edge_us;
+      uint8_t edge_is_rising = g_rc5_last_edge_is_rising;
       uint16_t packet_data = RC5TmpPacket.data;
       uint8_t bits_left = RC5TmpPacket.bitCount;
       uint8_t bits_done = (bits_left <= 12U) ? (uint8_t)(12U - bits_left) : 0U;
@@ -151,11 +156,17 @@ int main(void)
                                (((rise_us >= RC5_MIN_2T_US) && (rise_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
       const char *fall_class = ((fall_us >= RC5_MIN_1T_US) && (fall_us <= RC5_MAX_1T_US)) ? "1T" :
                                (((fall_us >= RC5_MIN_2T_US) && (fall_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
+      const char *edge_class = ((edge_us >= RC5_MIN_1T_US) && (edge_us <= RC5_MAX_1T_US)) ? "1T" :
+               (((edge_us >= RC5_MIN_2T_US) && (edge_us <= RC5_MAX_2T_US)) ? "2T" : "OUT");
+      const char *edge_name = (edge_is_rising != 0U) ? "R" : "F";
 
       int dbg_len = sprintf(buf,
-                            "[RC5DBG][%lu] edges=%lu rise=%luus(%s) fall=%luus(%s) bits=%s done=%u left=%u data=0x%04X st=0x%02X lb=%u\r\n",
+                "[RC5DBG][%lu] edges=%lu src=%s:%luus(%s) rise=%luus(%s) fall=%luus(%s) bits=%s done=%u left=%u data=0x%04X st=0x%02X lb=%u\r\n",
                             (unsigned long)dbg_counter++,
                             (unsigned long)g_rc5_edge_count,
+                edge_name,
+                (unsigned long)edge_us,
+                edge_class,
                             (unsigned long)rise_us,
                             rise_class,
                             (unsigned long)fall_us,
@@ -290,7 +301,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 31;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = RC5_TIMEOUT_US;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -308,22 +319,22 @@ static void MX_TIM2_Init(void)
   }
   sSlaveConfig.SlaveMode = TIM_SLAVEMODE_RESET;
   sSlaveConfig.InputTrigger = TIM_TS_TI1FP1;
-  sSlaveConfig.TriggerPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sSlaveConfig.TriggerPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
   sSlaveConfig.TriggerPrescaler = TIM_ICPSC_DIV1;
-  sSlaveConfig.TriggerFilter = 8;
+  sSlaveConfig.TriggerFilter = 0;
   if (HAL_TIM_SlaveConfigSynchro(&htim2, &sSlaveConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
   sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 8;
+  sConfigIC.ICFilter = 0;
   if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sConfigIC.ICSelection = TIM_ICSELECTION_INDIRECTTI;
   if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
   {

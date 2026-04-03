@@ -46,7 +46,10 @@
 volatile uint32_t g_rc5_edge_count = 0;
 volatile uint32_t g_rc5_last_rise_us = 0;
 volatile uint32_t g_rc5_last_fall_us = 0;
+volatile uint32_t g_rc5_last_edge_us = 0;
+volatile uint8_t g_rc5_last_edge_is_rising = 0;
 volatile uint8_t g_rc5_new_pulse = 0;
+static uint32_t s_last_rising_capture = 0;
 
 /* USER CODE END PV */
 
@@ -222,8 +225,8 @@ void TIM2_IRQHandler(void)
 
 /**
  * @brief  TIM2 Input Capture callback – aangeroepen door HAL bij elke capture.
- *         CH1 (rising edge): meet periode tussen twee stijgende flanken.
- *         CH2 (falling edge): meet duur van de hoge puls.
+ *         CH1 (falling edge): meet periode tussen twee dalende flanken.
+ *         CH2 (rising edge): meet duur van de lage puls.
  *         RC5_DataSampling verwerkt de waarde en bepaalt het bitpatroon.
  */
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
@@ -232,19 +235,34 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   {
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
     {
-      /* CH1: stijgende flank */
-      g_rc5_last_rise_us = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-      g_rc5_edge_count++;
-      g_rc5_new_pulse = 1;
-      RC5_DataSampling(g_rc5_last_rise_us, 1);
-    }
-    else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
-    {
-      /* CH2: dalende flank */
-      g_rc5_last_fall_us = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+      /* CH1: dalende flank.
+         Meet de lage puls zoals in ST referentie: falling - vorige rising. */
+      uint32_t falling_capture = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+      if (falling_capture >= s_last_rising_capture)
+      {
+        g_rc5_last_fall_us = falling_capture - s_last_rising_capture;
+      }
+      else
+      {
+        uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
+        g_rc5_last_fall_us = (arr + 1U - s_last_rising_capture) + falling_capture;
+      }
+      g_rc5_last_edge_us = g_rc5_last_fall_us;
+      g_rc5_last_edge_is_rising = 0;
       g_rc5_edge_count++;
       g_rc5_new_pulse = 1;
       RC5_DataSampling(g_rc5_last_fall_us, 0);
+    }
+    else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+    {
+      /* CH2: stijgende flank */
+      s_last_rising_capture = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+      g_rc5_last_rise_us = s_last_rising_capture;
+      g_rc5_last_edge_us = g_rc5_last_rise_us;
+      g_rc5_last_edge_is_rising = 1;
+      g_rc5_edge_count++;
+      g_rc5_new_pulse = 1;
+      RC5_DataSampling(g_rc5_last_rise_us, 1);
     }
   }
 }

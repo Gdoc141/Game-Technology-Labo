@@ -3,9 +3,9 @@
 <title>Static Call Graph - [Opdracht_2_LaserTag_Game\Opdracht_2_LaserTag_Game.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image Opdracht_2_LaserTag_Game\Opdracht_2_LaserTag_Game.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6240002: Last Updated: Fri Mar 13 15:37:16 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6240002: Last Updated: Fri Mar 20 15:45:58 2026
 <BR><P>
-<H3>Maximum Stack Usage =        568 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
+<H3>Maximum Stack Usage =        592 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
 __rt_entry_main &rArr; main &rArr; HAL_UART_Init &rArr; HAL_UART_MspInit &rArr; HAL_RCCEx_PeriphCLKConfig &rArr; RCCEx_PLLSAI1_Config
 <P>
@@ -259,7 +259,7 @@ Global Symbols
 <P><STRONG><a name="[cb]"></a>__rt_entry_postsh_1</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, __rtentry2.o(.ARM.Collect$$rtentry$$00000009))
 
 <P><STRONG><a name="[5b]"></a>__rt_entry_main</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, __rtentry2.o(.ARM.Collect$$rtentry$$0000000D))
-<BR><BR>[Stack]<UL><LI>Max Depth = 568 + Unknown Stack Size
+<BR><BR>[Stack]<UL><LI>Max Depth = 592 + Unknown Stack Size
 <LI>Call Chain = __rt_entry_main &rArr; main &rArr; HAL_UART_Init &rArr; HAL_UART_MspInit &rArr; HAL_RCCEx_PeriphCLKConfig &rArr; RCCEx_PLLSAI1_Config
 </UL>
 <BR>[Calls]<UL><LI><a href="#[5c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
@@ -824,7 +824,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[5c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[80]"></a>HAL_TIM_IC_CaptureCallback</STRONG> (Thumb, 78 bytes, Stack size 16 bytes, stm32l4xx_it.o(.text.HAL_TIM_IC_CaptureCallback))
+<P><STRONG><a name="[80]"></a>HAL_TIM_IC_CaptureCallback</STRONG> (Thumb, 116 bytes, Stack size 16 bytes, stm32l4xx_it.o(.text.HAL_TIM_IC_CaptureCallback))
 <BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = HAL_TIM_IC_CaptureCallback &rArr; RC5_DataSampling
 </UL>
 <BR>[Calls]<UL><LI><a href="#[82]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RC5_DataSampling
@@ -1049,8 +1049,8 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32l432xx.o(RESET)
 </UL>
-<P><STRONG><a name="[5c]"></a>main</STRONG> (Thumb, 1316 bytes, Stack size 376 bytes, main.o(.text.main))
-<BR><BR>[Stack]<UL><LI>Max Depth = 568 + Unknown Stack Size
+<P><STRONG><a name="[5c]"></a>main</STRONG> (Thumb, 1404 bytes, Stack size 400 bytes, main.o(.text.main))
+<BR><BR>[Stack]<UL><LI>Max Depth = 592 + Unknown Stack Size
 <LI>Call Chain = main &rArr; HAL_UART_Init &rArr; HAL_UART_MspInit &rArr; HAL_RCCEx_PeriphCLKConfig &rArr; RCCEx_PLLSAI1_Config
 </UL>
 <BR>[Calls]<UL><LI><a href="#[a8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RC5_Decode
