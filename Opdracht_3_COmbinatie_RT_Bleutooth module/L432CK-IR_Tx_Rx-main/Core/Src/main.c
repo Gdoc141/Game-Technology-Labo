@@ -24,9 +24,7 @@
 #include "ir_transceiver.h"
 #include "rc5_decode.h"
 #include "rc5_encode.h"
-#include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -51,526 +49,34 @@ TIM_HandleTypeDef htim15;
 TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE BEGIN PV */
 static uint8_t toggle_bit = 0;
-static uint8_t tx_address = 1;
+static uint8_t tx_address = 0;
 static uint8_t tx_command = 0;
 static volatile uint8_t button_pressed = 0;
 static uint32_t last_button_tick = 0;
 #define DEBOUNCE_MS 300  /* Covers press + release bounce */
-
-typedef enum
-{
-  WEAPON_MODE_SINGLE = 0,
-  WEAPON_MODE_SHOTGUN,
-  WEAPON_MODE_BURST
-} WeaponMode_t;
-
-static char player_name[24] = "PLAYER1";
-static WeaponMode_t weapon_mode = WEAPON_MODE_SINGLE;
-static uint8_t burst_count = 3;
-static uint32_t burst_gap_ms = 120U;
-static uint32_t auto_fire_interval_ms = 3000U;
-static uint8_t auto_fire_enabled = 0;
-
-static volatile uint8_t uart_rx_byte = 0;
-static volatile uint8_t uart_line_ready = 0;
-static char uart_line[80];
-static uint8_t uart_line_len = 0;
-
-static uint8_t fire_request = 0;
-static uint8_t firing_sequence_active = 0;
-static uint8_t shots_remaining = 0;
-static uint32_t next_fire_due_tick = 0;
-static uint32_t next_cycle_tick = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART1_UART_Init(void);
+static void MX_DMA_Init(void);
+static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM15_Init(void);
 static void MX_TIM16_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static char *SkipSpaces(char *text)
-{
-  while ((*text == ' ') || (*text == '\t'))
-  {
-    text++;
-  }
-
-  return text;
-}
-
-static void TrimTrailingSpaces(char *text)
-{
-  size_t length = strlen(text);
-
-  while ((length > 0U) &&
-         ((text[length - 1U] == ' ') ||
-          (text[length - 1U] == '\t') ||
-          (text[length - 1U] == '\r') ||
-          (text[length - 1U] == '\n')))
-  {
-    text[length - 1U] = '\0';
-    length--;
-  }
-}
-
-static uint8_t EqualsIgnoreCase(const char *left, const char *right)
-{
-  while ((*left != '\0') && (*right != '\0'))
-  {
-    if ((char)toupper((unsigned char)*left) != (char)toupper((unsigned char)*right))
-    {
-      return 0;
-    }
-
-    left++;
-    right++;
-  }
-
-  return (*left == '\0') && (*right == '\0');
-}
-
-static const char *WeaponModeToString(WeaponMode_t mode)
-{
-  switch (mode)
-  {
-    case WEAPON_MODE_SHOTGUN:
-      return "SHOTGUN";
-    case WEAPON_MODE_BURST:
-      return "BURST";
-    default:
-      return "SINGLE";
-  }
-}
-
-static void SendStatusLine(void)
-{
-  char status[160];
-
-  snprintf(status, sizeof(status),
-           "[CFG] Name:%s Addr:%u Cmd:%u Mode:%s Burst:%u Gap:%lu ms Interval:%lu ms Auto:%s\r\n",
-           player_name,
-           tx_address,
-           tx_command,
-           WeaponModeToString(weapon_mode),
-           burst_count,
-           (unsigned long)burst_gap_ms,
-           (unsigned long)auto_fire_interval_ms,
-           auto_fire_enabled ? "ON" : "OFF");
-  HAL_UART_Transmit(&huart1, (uint8_t *)status, strlen(status), 50);
-}
-
-static void SendHelpLine(void)
-{
-  const char *help =
-      "[CMD] NAME <text> | PLAYER <0-31> | ADDR <0-31> | CMD <0-63> | BULLET <0-63>\r\n"
-      "[CMD] MODE SINGLE|SHOTGUN|BURST | BURST <count> | GAP <ms> | INTERVAL <ms> | AUTO ON|OFF | FIRE\r\n";
-  HAL_UART_Transmit(&huart1, (uint8_t *)help, strlen(help), 50);
-}
-
-static void QueueFireSequence(uint8_t burstShots)
-{
-  firing_sequence_active = 1;
-  shots_remaining = burstShots;
-  fire_request = 1;
-  next_fire_due_tick = 0;
-}
-
-static void StartManualFire(void)
-{
-  uint8_t burstShots = 1;
-
-  if ((weapon_mode == WEAPON_MODE_SHOTGUN) || (weapon_mode == WEAPON_MODE_BURST))
-  {
-    burstShots = (burst_count == 0U) ? 1U : burst_count;
-  }
-
-  QueueFireSequence(burstShots);
-}
-
-static void TryTransmitPendingShot(void)
-{
-  uint32_t now = HAL_GetTick();
-  uint8_t frame_toggle = toggle_bit;
-  char txbuf[128];
-
-  if (!fire_request)
-  {
-    return;
-  }
-
-  if (now < next_fire_due_tick)
-  {
-    return;
-  }
-
-  if (IR_GetState() != IR_STATE_IDLE)
-  {
-    return;
-  }
-
-  if (IR_StartTransmit(frame_toggle, tx_address, tx_command) != 0)
-  {
-    next_fire_due_tick = now + 5U;
-    return;
-  }
-
-  toggle_bit ^= 1U;
-
-  snprintf(txbuf, sizeof(txbuf),
-           "[TX] Player:%s Addr:%u Cmd:%u Mode:%s Toggle:%u Shot:%u\r\n",
-           player_name,
-           tx_address,
-           tx_command,
-           WeaponModeToString(weapon_mode),
-           frame_toggle,
-           (unsigned int)((shots_remaining == 0U) ? 1U : shots_remaining));
-  HAL_UART_Transmit(&huart1, (uint8_t *)txbuf, strlen(txbuf), 50);
-
-  if (shots_remaining > 0U)
-  {
-    shots_remaining--;
-  }
-
-  if (shots_remaining > 0U)
-  {
-    next_fire_due_tick = now + burst_gap_ms;
-  }
-  else
-  {
-    fire_request = 0;
-    firing_sequence_active = 0;
-    next_cycle_tick = now + auto_fire_interval_ms;
-  }
-}
-
-static void ProcessAutoFireSchedule(void)
-{
-  uint32_t now = HAL_GetTick();
-
-  if (!fire_request)
-  {
-    if (auto_fire_enabled && (now >= next_cycle_tick))
-    {
-      StartManualFire();
-    }
-    else
-    {
-      return;
-    }
-  }
-
-  TryTransmitPendingShot();
-}
-
-static uint8_t ParseU32(const char *text, uint32_t *value)
-{
-  char *end_ptr = NULL;
-  unsigned long parsed = strtoul(text, &end_ptr, 0);
-
-  if ((text == end_ptr) || (end_ptr == NULL))
-  {
-    return 0;
-  }
-
-  while ((*end_ptr == ' ') || (*end_ptr == '\t'))
-  {
-    end_ptr++;
-  }
-
-  if (*end_ptr != '\0')
-  {
-    return 0;
-  }
-
-  *value = (uint32_t)parsed;
-  return 1;
-}
-
-static void PrintCommandAck(const char *label)
-{
-  char ack[128];
-
-  snprintf(ack, sizeof(ack), "[CFG] %s\r\n", label);
-  HAL_UART_Transmit(&huart1, (uint8_t *)ack, strlen(ack), 50);
-}
-
-static void ProcessCommandLine(char *line)
-{
-  char *command;
-  char *argument;
-
-  command = SkipSpaces(line);
-  TrimTrailingSpaces(command);
-
-  if (*command == '\0')
-  {
-    return;
-  }
-
-  argument = command;
-  while ((*argument != '\0') && (*argument != ' ') && (*argument != '\t'))
-  {
-    argument++;
-  }
-
-  if (*argument != '\0')
-  {
-    *argument++ = '\0';
-  }
-  argument = SkipSpaces(argument);
-
-  for (char *cursor = command; *cursor != '\0'; cursor++)
-  {
-    *cursor = (char)toupper((unsigned char)*cursor);
-  }
-
-  if (EqualsIgnoreCase(command, "HELP") || EqualsIgnoreCase(command, "?"))
-  {
-    SendHelpLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "STATUS"))
-  {
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "NAME"))
-  {
-    if (*argument == '\0')
-    {
-      PrintCommandAck("NAME requires a value");
-      return;
-    }
-
-    strncpy(player_name, argument, sizeof(player_name) - 1U);
-    player_name[sizeof(player_name) - 1U] = '\0';
-    TrimTrailingSpaces(player_name);
-    PrintCommandAck("Name updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "PLAYER") || EqualsIgnoreCase(command, "ADDR"))
-  {
-    uint32_t parsed = 0;
-
-    if (!ParseU32(argument, &parsed) || (parsed > 31U))
-    {
-      PrintCommandAck("Address must be 0..31");
-      return;
-    }
-
-    tx_address = (uint8_t)parsed;
-    PrintCommandAck("Player address updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "CMD") || EqualsIgnoreCase(command, "BULLET"))
-  {
-    uint32_t parsed = 0;
-
-    if (!ParseU32(argument, &parsed) || (parsed > 63U))
-    {
-      PrintCommandAck("Command must be 0..63");
-      return;
-    }
-
-    tx_command = (uint8_t)parsed;
-    PrintCommandAck("Bullet command updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "BURST"))
-  {
-    uint32_t parsed = 0;
-
-    if (!ParseU32(argument, &parsed) || (parsed == 0U) || (parsed > 8U))
-    {
-      PrintCommandAck("Burst must be 1..8");
-      return;
-    }
-
-    burst_count = (uint8_t)parsed;
-    PrintCommandAck("Burst count updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "GAP"))
-  {
-    uint32_t parsed = 0;
-
-    if (!ParseU32(argument, &parsed) || (parsed < 120U))
-    {
-      PrintCommandAck("Gap must be at least 120 ms");
-      return;
-    }
-
-    burst_gap_ms = parsed;
-    PrintCommandAck("Burst gap updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "INTERVAL"))
-  {
-    uint32_t parsed = 0;
-
-    if (!ParseU32(argument, &parsed) || (parsed < 120U))
-    {
-      PrintCommandAck("Interval must be at least 120 ms");
-      return;
-    }
-
-    auto_fire_interval_ms = parsed;
-    PrintCommandAck("Auto-fire interval updated");
-    SendStatusLine();
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "AUTO"))
-  {
-    if (EqualsIgnoreCase(argument, "ON"))
-    {
-      auto_fire_enabled = 1;
-      if (weapon_mode == WEAPON_MODE_SINGLE)
-      {
-        weapon_mode = WEAPON_MODE_BURST;
-      }
-      next_cycle_tick = HAL_GetTick() + auto_fire_interval_ms;
-      PrintCommandAck("Auto-fire enabled");
-      SendStatusLine();
-      return;
-    }
-
-    if (EqualsIgnoreCase(argument, "OFF"))
-    {
-      auto_fire_enabled = 0;
-      PrintCommandAck("Auto-fire disabled");
-      SendStatusLine();
-      return;
-    }
-
-    if (*argument != '\0')
-    {
-      uint32_t parsed = 0;
-
-      if (!ParseU32(argument, &parsed) || (parsed < 120U))
-      {
-        PrintCommandAck("Auto-fire interval must be at least 120 ms");
-        return;
-      }
-
-      auto_fire_enabled = 1;
-      auto_fire_interval_ms = parsed;
-      if (weapon_mode == WEAPON_MODE_SINGLE)
-      {
-        weapon_mode = WEAPON_MODE_BURST;
-      }
-      next_cycle_tick = HAL_GetTick() + auto_fire_interval_ms;
-      PrintCommandAck("Auto-fire enabled");
-      SendStatusLine();
-      return;
-    }
-
-    PrintCommandAck("AUTO needs ON, OFF or a delay in ms");
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "MODE"))
-  {
-    if (EqualsIgnoreCase(argument, "SINGLE"))
-    {
-      weapon_mode = WEAPON_MODE_SINGLE;
-      auto_fire_enabled = 0;
-      PrintCommandAck("Mode set to SINGLE");
-      SendStatusLine();
-      return;
-    }
-
-    if (EqualsIgnoreCase(argument, "SHOTGUN"))
-    {
-      weapon_mode = WEAPON_MODE_SHOTGUN;
-      auto_fire_enabled = 0;
-      PrintCommandAck("Mode set to SHOTGUN");
-      SendStatusLine();
-      return;
-    }
-
-    if (EqualsIgnoreCase(argument, "BURST"))
-    {
-      weapon_mode = WEAPON_MODE_BURST;
-      auto_fire_enabled = 1;
-      next_cycle_tick = HAL_GetTick() + auto_fire_interval_ms;
-      PrintCommandAck("Mode set to BURST");
-      SendStatusLine();
-      return;
-    }
-
-    PrintCommandAck("MODE must be SINGLE, SHOTGUN or BURST");
-    return;
-  }
-
-  if (EqualsIgnoreCase(command, "FIRE"))
-  {
-    if (!firing_sequence_active)
-    {
-      StartManualFire();
-      PrintCommandAck("Fire request queued");
-    }
-    else
-    {
-      PrintCommandAck("Fire sequence already running");
-    }
-    return;
-  }
-
-  PrintCommandAck("Unknown command, send HELP");
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  if (huart->Instance != USART1)
-  {
-    return;
-  }
-
-  if ((uart_rx_byte == '\r') || (uart_rx_byte == '\n'))
-  {
-    if (uart_line_len > 0U)
-    {
-      uart_line[uart_line_len] = '\0';
-      uart_line_ready = 1;
-    }
-    uart_line_len = 0;
-  }
-  else if (uart_line_len < (sizeof(uart_line) - 1U))
-  {
-    uart_line[uart_line_len++] = (char)uart_rx_byte;
-  }
-  else
-  {
-    uart_line_len = 0;
-  }
-
-  HAL_UART_Receive_IT(&huart1, (uint8_t *)&uart_rx_byte, 1);
-}
-
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == GPIO_PIN_3)  /* PA3 — BTN_TX */
@@ -616,21 +122,20 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init();
+  MX_DMA_Init();
+  MX_USART2_UART_Init();
   MX_TIM2_Init();
   MX_TIM15_Init();
   MX_TIM16_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   IR_Transceiver_Init();
-  HAL_UART_Receive_IT(&huart1, (uint8_t *)&uart_rx_byte, 1);
 
   /* Quick boot banner — proves UART works */
   {
-    const char *banner = "\r\n[BOOT] IR TX/RX ready (115200-8N1) | use HELP for commands\r\n";
-    HAL_UART_Transmit(&huart1, (uint8_t *)banner, strlen(banner), 50);
+    const char *banner = "\r\n[BOOT] IR TX/RX ready (115200-8N1)\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t *)banner, strlen(banner), 50);
   }
-  SendStatusLine();
-  SendHelpLine();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -643,19 +148,22 @@ int main(void)
 
     /* --- State machine processing --- */
     IR_Transceiver_Process();
-    ProcessAutoFireSchedule();
-
-    if (uart_line_ready)
-    {
-      uart_line_ready = 0;
-      ProcessCommandLine(uart_line);
-    }
 
     /* --- TX trigger (button on PB3 temporarily, or serial command) --- */
     if (button_pressed && IR_GetState() == IR_STATE_IDLE)
     {
-      StartManualFire();
+      toggle_bit ^= 1;
+      IR_StartTransmit(toggle_bit, tx_address, tx_command);
       button_pressed = 0;
+
+      char txbuf[64];
+      snprintf(txbuf, sizeof(txbuf), "[TX] Addr:0x%02X Cmd:0x%02X Tog:%d\r\n",
+               tx_address, tx_command, toggle_bit);
+      HAL_UART_Transmit(&huart2, (uint8_t *)txbuf, strlen(txbuf), 50);
+
+      /* Increment command 0..63, then address 0..31 */
+      tx_command++;
+      if (tx_command > 63) { tx_command = 0; tx_address = (tx_address + 1) & 0x1F; }
     }
 
     /* --- RX frame received --- */
@@ -664,9 +172,9 @@ int main(void)
       RC5_Decode(&RC5_FRAME);
 
       char buf[64];
-      snprintf(buf, sizeof(buf), "[RX] PlayerID:%u Cmd:%u Tog:%u\r\n",
-           RC5_FRAME.Address, RC5_FRAME.Command, RC5_FRAME.ToggleBit);
-      HAL_UART_Transmit(&huart1, (uint8_t *)buf, strlen(buf), 50);
+      snprintf(buf, sizeof(buf), "[RX] Addr:0x%02X Cmd:0x%02X Tog:%d\r\n",
+               RC5_FRAME.Address, RC5_FRAME.Command, RC5_FRAME.ToggleBit);
+      HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 50);
 
       /* Quick LED blink */
       HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
@@ -922,20 +430,20 @@ static void MX_TIM16_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
+  * @brief USART1 Initialization Function
   * @param None
   * @retval None
   */
 static void MX_USART1_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART1_Init 0 */
 
-  /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART1_Init 0 */
 
-  /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART1_Init 1 */
 
-  /* USER CODE END USART2_Init 1 */
+  /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
   huart1.Init.BaudRate = 115200;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
@@ -950,9 +458,63 @@ static void MX_USART1_UART_Init(void)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
 
