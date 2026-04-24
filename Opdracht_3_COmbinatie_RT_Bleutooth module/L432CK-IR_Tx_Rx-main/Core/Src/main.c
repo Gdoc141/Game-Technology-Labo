@@ -21,11 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ir_transceiver.h"
-#include "rc5_decode.h"
-#include "rc5_encode.h"
-#include <stdio.h>
-#include <string.h>
+#include "app_ble_ir.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,12 +50,7 @@ DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE BEGIN PV */
-static uint8_t toggle_bit = 0;
-static uint8_t tx_address = 0;
-static uint8_t tx_command = 0;
-static volatile uint8_t button_pressed = 0;
-static uint32_t last_button_tick = 0;
-#define DEBOUNCE_MS 300  /* Covers press + release bounce */
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -79,17 +70,7 @@ static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN 0 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if (GPIO_Pin == GPIO_PIN_3)  /* PA3 — BTN_TX */
-  {
-    if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3) != GPIO_PIN_SET) return;
-
-    uint32_t now = HAL_GetTick();
-    if ((now - last_button_tick) < DEBOUNCE_MS) return;
-    last_button_tick = now;
-
-    if (button_pressed) return;
-    button_pressed = 1;
-  }
+  App_BleIr_OnExti(GPIO_Pin);
 }
 /* USER CODE END 0 */
 
@@ -129,13 +110,8 @@ int main(void)
   MX_TIM16_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  IR_Transceiver_Init();
+  App_BleIr_Init();
 
-  /* Quick boot banner — proves UART works */
-  {
-    const char *banner = "\r\n[BOOT] IR TX/RX ready (115200-8N1)\r\n";
-    HAL_UART_Transmit(&huart2, (uint8_t *)banner, strlen(banner), 50);
-  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -145,42 +121,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-    /* --- State machine processing --- */
-    IR_Transceiver_Process();
-
-    /* --- TX trigger (button on PB3 temporarily, or serial command) --- */
-    if (button_pressed && IR_GetState() == IR_STATE_IDLE)
-    {
-      toggle_bit ^= 1;
-      IR_StartTransmit(toggle_bit, tx_address, tx_command);
-      button_pressed = 0;
-
-      char txbuf[64];
-      snprintf(txbuf, sizeof(txbuf), "[TX] Addr:0x%02X Cmd:0x%02X Tog:%d\r\n",
-               tx_address, tx_command, toggle_bit);
-      HAL_UART_Transmit(&huart2, (uint8_t *)txbuf, strlen(txbuf), 50);
-
-      /* Increment command 0..63, then address 0..31 */
-      tx_command++;
-      if (tx_command > 63) { tx_command = 0; tx_address = (tx_address + 1) & 0x1F; }
-    }
-
-    /* --- RX frame received --- */
-    if (RC5FrameReceived && IR_GetState() == IR_STATE_IDLE)
-    {
-      RC5_Decode(&RC5_FRAME);
-
-      char buf[64];
-      snprintf(buf, sizeof(buf), "[RX] Addr:0x%02X Cmd:0x%02X Tog:%d\r\n",
-               RC5_FRAME.Address, RC5_FRAME.Command, RC5_FRAME.ToggleBit);
-      HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 50);
-
-      /* Quick LED blink */
-      HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
-      HAL_Delay(100);
-      HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-    }
+    App_BleIr_Process();
   }
   /* USER CODE END 3 */
 }
