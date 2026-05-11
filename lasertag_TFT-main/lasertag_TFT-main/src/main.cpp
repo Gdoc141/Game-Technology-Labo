@@ -94,6 +94,12 @@ void parseLine(const char *line, GameState &st) {
             st.life--;
             st.dirtyLife = true;
         }
+    } else if (strcasecmp(key, "LIFE") == 0) {
+        uint8_t newLife = (uint8_t)atoi(value);
+        if (newLife <= 5) {
+            st.life = newLife;
+            st.dirtyLife = true;
+        }
     }
 }
 

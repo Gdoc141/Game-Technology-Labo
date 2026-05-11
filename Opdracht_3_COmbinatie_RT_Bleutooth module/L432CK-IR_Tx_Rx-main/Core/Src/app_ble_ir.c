@@ -43,6 +43,17 @@ static uint8_t tx_command = 0;
 static uint32_t total_hits = 0;
 static uint32_t hits_by_addr[32] = {0};
 
+#define HP_MAX       5U
+#define NAME_MAX     16U
+
+typedef struct
+{
+  char    name[NAME_MAX];
+  uint8_t hp;
+} PlayerState;
+
+static PlayerState player = { "Speler", HP_MAX };
+
 typedef enum
 {
   CMD_SRC_VCP = 0,
@@ -53,6 +64,10 @@ static CmdSource active_cmd_source = CMD_SRC_VCP;
 
 static void BleTx(const char *text);
 static void DebugTx(const char *text);
+static void HudTx(const char *text);
+static void HudSendName(void);
+static void HudSendHit(void);
+static void ApplyHit(void);
 static void ReplyTx(const char *text);
 static void ProcessVcpInput(void);
 static void HandleVcpByte(uint8_t byte);
@@ -120,6 +135,43 @@ static void BleTx(const char *text)
 static void DebugTx(const char *text)
 {
   HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)strlen(text), 80);
+}
+
+static void HudTx(const char *text)
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)strlen(text), 100);
+}
+
+static void HudSendName(void)
+{
+  char buf[NAME_MAX + 8];
+  snprintf(buf, sizeof(buf), "NAME:%s\n", player.name);
+  HudTx(buf);
+}
+
+static void HudSendHit(void)
+{
+  HudTx("HIT:\n");
+}
+
+static void HudSendLife(void)
+{
+  char buf[12];
+  snprintf(buf, sizeof(buf), "LIFE:%u\n", player.hp);
+  HudTx(buf);
+}
+
+static void ApplyHit(void)
+{
+  if (player.hp > 0U)
+  {
+    player.hp--;
+  }
+  HudSendHit();
+
+  char dbg[40];
+  snprintf(dbg, sizeof(dbg), "[HIT] HP left: %u/%u\r\n", player.hp, HP_MAX);
+  DebugTx(dbg);
 }
 
 static void ReplyTx(const char *text)
@@ -409,6 +461,32 @@ static void HandleCommand(char *line)
   if (strcmp(cmd, "reset_hits") == 0)
   {
     ResetHits();
+    player.hp = HP_MAX;
+    HudSendLife();
+    ReplyTx("reset_hits: ok (hp restored)\r\n");
+    return;
+  }
+
+  if (strncmp(cmd, "set_name:", 9) == 0)
+  {
+    const char *newname = cmd + 9;
+    while (*newname == ' ') { newname++; }
+    if (*newname == '\0')
+    {
+      ReplyTx("error: set_name requires a name\r\n");
+      return;
+    }
+    strncpy(player.name, newname, NAME_MAX - 1U);
+    player.name[NAME_MAX - 1U] = '\0';
+    HudSendName();
+    ReplyTx("set_name: ok\r\n");
+    return;
+  }
+
+  if (strcmp(cmd, "simulate_hit") == 0)
+  {
+    ApplyHit();
+    ReplyTx("simulate_hit: ok\r\n");
     return;
   }
 
@@ -531,8 +609,12 @@ void App_BleIr_Init(void)
   HAL_Delay(1000);
   
   DebugTx("[BOOT] BLE initialization complete\r\n");
-  DebugTx("[BOOT] Commands via VCP: current_settings | set_address:\"<0..31>\" | set_command:\"<0..127>\" | current_hits | reset_hits\r\n");
+  DebugTx("[BOOT] Commands via VCP: current_settings | set_address:\"<0..31>\" | set_command:\"<0..127>\" | current_hits | reset_hits | set_name:<naam> | simulate_hit\r\n");
   DebugTx("[BOOT] Ready.\r\n");
+
+  /* Send initial HUD state to TFT */
+  HAL_Delay(200);
+  HudSendName();
 }
 
 void App_BleIr_OnExti(uint16_t gpioPin)
@@ -584,6 +666,12 @@ void App_BleIr_Process(void)
     char out[64];
     snprintf(out, sizeof(out), "[RX] Addr:%u Cmd:%u Tog:%u\r\n", RC5_FRAME.Address, RC5_FRAME.Command, RC5_FRAME.ToggleBit);
     DebugTx(out);
+
+    /* Hit on own TX address = incoming shot at this player */
+    if ((RC5_FRAME.Address & 0x1FU) == (uint8_t)(tx_address & 0x1FU))
+    {
+      ApplyHit();
+    }
 
     HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
     HAL_Delay(50);
