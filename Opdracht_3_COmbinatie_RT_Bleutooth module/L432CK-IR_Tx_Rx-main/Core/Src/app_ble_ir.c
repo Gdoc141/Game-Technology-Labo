@@ -48,11 +48,12 @@ static uint32_t hits_by_addr[32] = {0};
 
 typedef struct
 {
-  char    name[NAME_MAX];
-  uint8_t hp;
+  char     name[NAME_MAX];
+  uint8_t  hp;
+  uint32_t color;
 } PlayerState;
 
-static PlayerState player = { "Speler", HP_MAX };
+static PlayerState player = { "Speler", HP_MAX, 0x000000UL };
 
 typedef enum
 {
@@ -158,6 +159,13 @@ static void HudSendLife(void)
 {
   char buf[12];
   snprintf(buf, sizeof(buf), "LIFE:%u\n", player.hp);
+  HudTx(buf);
+}
+
+static void HudSendColor(void)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "COLOR:%06lX\n", (unsigned long)player.color);
   HudTx(buf);
 }
 
@@ -490,6 +498,52 @@ static void HandleCommand(char *line)
     return;
   }
 
+  if (strncmp(cmd, "set_color:", 10) == 0)
+  {
+    const char *input = cmd + 10;
+    while (*input == ' ') { input++; }
+
+    static const struct { const char *name; uint32_t rgb; } color_map[] = {
+      { "rood",     0xFF0000UL },
+      { "groen",    0x00FF00UL },
+      { "blauw",    0x0000FFUL },
+      { "geel",     0xFFFF00UL },
+      { "oranje",   0xFF8000UL },
+      { "paars",    0x800080UL },
+      { "roze",     0xFF00FFUL },
+      { "wit",      0xFFFFFFUL },
+      { "zwart",    0x000000UL },
+      { "cyaan",    0x00FFFFUL },
+    };
+
+    uint32_t val = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < sizeof(color_map) / sizeof(color_map[0]); i++)
+    {
+      if (strcasecmp(input, color_map[i].name) == 0)
+      {
+        val = color_map[i].rgb;
+        break;
+      }
+    }
+
+    if (val == 0xFFFFFFFFUL)
+    {
+      char *endptr = NULL;
+      unsigned long parsed = strtoul(input, &endptr, 16);
+      if (endptr == input || parsed > 0xFFFFFFUL)
+      {
+        ReplyTx("error: gebruik een kleur (rood/groen/blauw/geel/oranje/paars/roze/wit/zwart/cyaan) of hex RRGGBB\r\n");
+        return;
+      }
+      val = (uint32_t)parsed;
+    }
+
+    player.color = val;
+    HudSendColor();
+    ReplyTx("set_color: ok\r\n");
+    return;
+  }
+
   if (strncmp(cmd, "at:", 3) == 0)
   {
     const char *at_cmd = cmd + 3;
@@ -614,7 +668,9 @@ void App_BleIr_Init(void)
 
   /* Send initial HUD state to TFT */
   HAL_Delay(200);
+  HudSendColor();
   HudSendName();
+  HudSendLife();
 }
 
 void App_BleIr_OnExti(uint16_t gpioPin)

@@ -8,8 +8,10 @@ TFT_eSPI tft;
 struct GameState {
     char name[16] = "GEALLA";
     uint8_t life = 5;
+    uint16_t bgColor = TFT_BLACK;
     bool dirtyName = true;
     bool dirtyLife = true;
+    bool dirtyColor = false;
 };
 
 // Function to initialize the TFT display
@@ -22,11 +24,19 @@ void renderInit() {
 
 // Function to render the game state
 void render(GameState &st) {
+    // Render background color first (must happen before name/life)
+    if (st.dirtyColor) {
+        tft.fillScreen(st.bgColor);
+        st.dirtyColor = false;
+        st.dirtyName = true;
+        st.dirtyLife = true;
+    }
+
     // Render the name
     if (st.dirtyName) {
-        tft.fillRect(0, 34, 240, 40, TFT_BLACK);
-        tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.setTextFont(4); // Font 4 is alphanumeric. Font 6 only has digits and apm!
+        tft.fillRect(0, 34, 240, 40, st.bgColor);
+        tft.setTextColor(TFT_WHITE, st.bgColor);
+        tft.setTextFont(4);
         int w = tft.textWidth(st.name);
         tft.drawString(st.name, (240 - w) / 2, 38);
         st.dirtyName = false;
@@ -34,9 +44,9 @@ void render(GameState &st) {
 
     // Render the life
     if (st.dirtyLife) {
-        tft.fillRect(0, 90, 240, 30, TFT_BLACK);
+        tft.fillRect(0, 90, 240, 30, st.bgColor);
         for (int i = 0; i < 5; i++) {
-            uint16_t col = (i < st.life) ? TFT_RED : TFT_DARKGREY;
+            uint16_t col = (i < st.life) ? TFT_WHITE : TFT_DARKGREY;
             tft.fillCircle(30 + i * 40, 105, 10, col);
         }
         st.dirtyLife = false;
@@ -100,6 +110,13 @@ void parseLine(const char *line, GameState &st) {
             st.life = newLife;
             st.dirtyLife = true;
         }
+    } else if (strcasecmp(key, "COLOR") == 0) {
+        uint32_t rgb = (uint32_t)strtoul(value, nullptr, 16);
+        uint8_t r = (rgb >> 16) & 0xFF;
+        uint8_t g = (rgb >> 8) & 0xFF;
+        uint8_t b = rgb & 0xFF;
+        st.bgColor = tft.color565(r, g, b);
+        st.dirtyColor = true;
     }
 }
 
